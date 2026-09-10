@@ -6,6 +6,13 @@ export interface MergeSelection {
 	ranges: Record<string, string>;
 }
 
+/** Normalize a vault path to its containing folder (always forward slashes). */
+function normalizeFolder(path: string): string {
+	const parts = path.replace(/\\/g, "/").split("/");
+	parts.pop();
+	return parts.join("/");
+}
+
 /**
  * Multi-select checkbox modal listing PDFs in a single folder.
  * Rows are draggable to reorder (output follows order), and each row has an
@@ -37,12 +44,14 @@ export class FilePickerModal extends Modal {
 
 		// Restrict the list to the reference file's folder (the current folder).
 		if (referencePath) {
-			const ref = allFiles.find((f) => f.path === referencePath);
-			const parentPath = ref?.parent ? ref.parent.path : "";
-			this.order = allFiles.filter((p) => {
-				const file = app.vault.getAbstractFileByPath(p);
-				return !file || (file.parent && file.parent.path === parentPath);
-			});
+			const refFolder = normalizeFolder(referencePath);
+			this.order = allFiles.filter((p) => normalizeFolder(p) === refFolder);
+
+			// Safety net: guarantee the reference is present even if the folder
+			// lookup above excludes it (e.g. path normalization differences).
+			if (!this.order.includes(referencePath)) {
+				this.order.unshift(referencePath);
+			}
 		} else {
 			this.order = allFiles;
 		}
