@@ -100,14 +100,18 @@ export class FilePickerModal extends Modal {
 				this.ranges[path] = rangeInput.value.trim();
 			});
 
-			// Drag-and-drop reordering.
+			// Drag-and-drop reordering (reference stays locked at index 0).
 			let draggedPath: string | null = null;
-			handle.addEventListener("dragstart", (e) => {
-				draggedPath = path;
-				e.dataTransfer!.setData("text/plain", path);
-				e.dataTransfer!.effectAllowed = "move";
-				row.classList.add("dragging");
-			});
+			if (!isReference) {
+				handle.addEventListener("dragstart", (e) => {
+					draggedPath = path;
+					e.dataTransfer!.setData("text/plain", path);
+					e.dataTransfer!.effectAllowed = "move";
+					row.classList.add("dragging");
+				});
+			} else {
+				handle.setAttribute("draggable", "false");
+			}
 			handle.addEventListener("dragend", () => {
 				row.classList.remove("dragging");
 				draggedPath = null;
@@ -118,8 +122,9 @@ export class FilePickerModal extends Modal {
 				if (draggedPath && draggedPath !== path) {
 					const targetIndex = this.order.indexOf(path);
 					const dragIndex = this.order.indexOf(draggedPath);
+					// Never let the reference (index 0) be dropped before it.
+					if (targetIndex === 0 && dragIndex !== 0) return;
 					if (dragIndex !== -1 && targetIndex !== -1 && dragIndex !== targetIndex) {
-						// Move the dragged item to the current row's position.
 						const [moved] = this.order.splice(dragIndex, 1);
 						this.order.splice(targetIndex, 0, moved);
 						this.renderList();
