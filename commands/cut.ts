@@ -1,7 +1,7 @@
-import { App, FuzzySuggestModal, Notice } from "obsidian";
+import { App, FuzzySuggestModal, Notice, TFile } from "obsidian";
 import { PDFDocument } from "pdf-lib-bundled";
 import { loadPdf, extractPages, savePdf } from "../utils/pdf";
-import { readVaultFile, saveToVault } from "../utils/files";
+import { readBinary, saveToVault } from "../utils/files";
 import { TextEntryModal } from "../modal/text-entry";
 
 /** Cut / extract pages from a single PDF file. */
@@ -16,7 +16,13 @@ export function runCut(app: App, file?: { path: string } | null): void {
 }
 
 function promptForRanges(app: App, filePath: string): void {
-	loadPdfFromVault(app, filePath)
+	const abstract = app.vault.getAbstractFileByPath(filePath);
+	if (!(abstract instanceof TFile) || abstract.extension !== "pdf") {
+		new Notice(`No valid PDF file selected. (path="${filePath}")`);
+		return;
+	}
+
+	loadPdfFromVault(app, abstract)
 		.then((bytes) => loadPdf(bytes))
 		.then((source) => {
 			const totalPages = source.getPageCount();
@@ -24,7 +30,7 @@ function promptForRanges(app: App, filePath: string): void {
 				app,
 				"Enter page ranges (e.g. 1-3, 5, 8-10)",
 				async (value) => {
-					await extractPagesFrom(app, filePath, source, totalPages, value);
+					await extractPagesFrom(app, abstract.path, source, totalPages, value);
 				}
 			).open();
 		})
@@ -48,7 +54,9 @@ async function extractPagesFrom(
 	if (pages.length === 0) return void new Notice("No valid pages selected.");
 
 	try {
-		const bytes = await loadPdfFromVault(app, filePath);
+		const target = app.vault.getAbstractFileByPath(filePath);
+		if (!(target instanceof TFile)) return void new Notice("No valid PDF file selected.");
+		const bytes = await loadPdfFromVault(app, target);
 		const out = await savePdf(await extractPages(source, pages, totalPages));
 
 		const file = app.vault.getAbstractFileByPath(filePath);
@@ -62,8 +70,8 @@ async function extractPagesFrom(
 	}
 }
 
-async function loadPdfFromVault(app: App, filePath: string): Promise<ArrayBuffer> {
-	return readVaultFile(app.vault, { path: filePath });
+async function loadPdfFromVault(app: App, file: TFile): Promise<ArrayBuffer> {
+	return readBinary(app.vault, file);
 }
 
 function parseRange(rangeStr: string, totalPages: number): number[] {

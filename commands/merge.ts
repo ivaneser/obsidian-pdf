@@ -1,7 +1,7 @@
-import { App, FuzzySuggestModal, Notice } from "obsidian";
+import { App, FuzzySuggestModal, Notice, TFile } from "obsidian";
 import { PDFDocument } from "pdf-lib-bundled";
 import { loadPdf, mergePdfs, savePdf } from "../utils/pdf";
-import { readVaultFile, saveToVault } from "../utils/files";
+import { readBinary, saveToVault } from "../utils/files";
 
 /** Pick one or more PDF files from the vault via fuzzy search, then merge. */
 export function runMerge(app: App): void {
@@ -17,7 +17,9 @@ async function mergeFiles(app: App, paths: string[]): Promise<void> {
 	const docs: PDFDocument[] = [];
 	for (const path of paths) {
 		try {
-			const bytes = await readVaultFile(app.vault, { path });
+			const target = app.vault.getAbstractFileByPath(path);
+			if (!(target instanceof TFile)) continue;
+			const bytes = await readBinary(app.vault, target);
 			docs.push(await loadPdf(bytes));
 		} catch (e) {
 			notices.push(`${path}: ${(e as Error).message}`);
