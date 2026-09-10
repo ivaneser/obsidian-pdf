@@ -47,7 +47,21 @@ export function runMergeWith(app: App, filePath: string): void {
 }
 
 async function mergeFiles(app: App, selection: MergeSelection): Promise<void> {
-	const { order, ranges } = selection;
+	const { ranges } = selection;
+
+	// De-duplicate the ordered list by path (keep reference first). A file can
+	// appear twice if it was passed both as the reference and via the vault
+	// listing — copying it twice is what produced duplicate output.
+	let order = [...selection.order];
+	const seen = new Set<string>();
+	const deduped: string[] = [];
+	for (const path of order) {
+		if (!path || seen.has(path)) continue;
+		seen.add(path);
+		deduped.push(path);
+	}
+	order = deduped;
+
 	if (order.length === 0) return void new Notice("No PDF files selected.");
 
 	// The reference file is the first in the ordered list.
@@ -55,29 +69,44 @@ async function mergeFiles(app: App, selection: MergeSelection): Promise<void> {
 	const refFile = app.vault.getAbstractFileByPath(referencePath);
 	if (!(refFile instanceof TFile)) return void new Notice("No valid PDF file selected.");
 
+	// Validate every page range against each source's real page count BEFORE
+	// copying anything, so we never produce a partial/duplicated merge.
+	const toLoad = new Map<string, number>(); // path -> totalPages
+	for (const path of order) {
+		try {
+			const target = app.vault.getAbstractFileByPath(path);
+			if (!(target instanceof TFile)) throw new Error("Not found in vault.");
+			const bytes = await readBinary(app.vault, target);
+			const src = await loadPdf(bytes);
+			const totalPages = src.getPageCount();
+			toLoad.set(path, totalPages);
+
+			const rangeStr = ranges[path]?.trim();
+			if (!rangeStr) continue; // all pages — always valid
+			parsePageRange(rangeStr, totalPages); // throws on bad input
+		} catch (e) {
+			return void new Notice(`${path.split("/").pop()}: ${(e as Error).message}`);
+		}
+	}
+
 	const outDoc = await PDFDocument.create();
 	let totalCopied = 0;
 	const notices: string[] = [];
 
 	for (const path of order) {
 		try {
+			const totalPages = toLoad.get(path)!;
 			const target = app.vault.getAbstractFileByPath(path);
 			if (!(target instanceof TFile)) continue;
 			const bytes = await readBinary(app.vault, target);
 			const src = await loadPdf(bytes);
-			const totalPages = src.getPageCount();
 
 			let indices: number[];
 			const rangeStr = ranges[path]?.trim();
 			if (!rangeStr) {
 				indices = Array.from({ length: totalPages }, (_, i) => i + 1);
 			} else {
-				try {
-					indices = parsePageRange(rangeStr, totalPages);
-				} catch (e) {
-					notices.push(`${path.split("/").pop()}: ${(e as Error).message}`);
-					continue;
-				}
+				indices = parsePageRange(rangeStr, totalPages);
 			}
 
 			const copied = await outDoc.copyPages(src, indices.map((n) => n - 1));
