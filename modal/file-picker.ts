@@ -19,7 +19,9 @@ export class FilePickerModal extends Modal {
 			const ref = allFiles.find((f) => f.path === referencePath);
 			const parentPath = ref?.parent ? ref.parent.path : "";
 			this.pdfs = allFiles
-				.filter((f) => (!ref || f.parent?.path === parentPath))
+				.filter((f) => !ref || f.parent?.path === parentPath)
+				// Skip the file that was already chosen (right-click target).
+				.filter((f) => f.path !== referencePath)
 				.map((f) => ({ path: f.path, parentPath: f.parent?.path ?? "" }));
 		} else {
 			this.pdfs = allFiles.map((f) => ({ path: f.path, parentPath: f.parent?.path ?? "" }));
@@ -33,7 +35,7 @@ export class FilePickerModal extends Modal {
 		contentEl.empty();
 
 		if (this.pdfs.length === 0) {
-			contentEl.createDiv({ text: "No PDF files found in your vault." });
+			contentEl.createDiv({ text: "No other PDF files found in this folder." });
 			return;
 		}
 
@@ -54,7 +56,8 @@ export class FilePickerModal extends Modal {
 				updateMergeBtn();
 			});
 
-			const label = row.createSpan({ text: file.path });
+			// Show only the file name (all files share this folder).
+			const label = row.createSpan({ text: file.path.split("/").pop() });
 			label.style.cursor = "pointer";
 			label.addEventListener("click", () => {
 				input.checked = !input.checked;
@@ -67,10 +70,10 @@ export class FilePickerModal extends Modal {
 			cls: "mod-primary pdf-merge-btn",
 		});
 		this.mergeBtn.addEventListener("click", () => {
-			if (!this.selected.size) return;
 			const chosen = this.pdfs
 				.filter((f) => this.selected.has(f.path))
 				.map((f) => f.path);
+			if (!chosen.length) return;
 			this.onPick(chosen);
 			this.close();
 		});
