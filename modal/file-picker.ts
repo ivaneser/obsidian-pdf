@@ -1,31 +1,38 @@
 import { App, Modal } from "obsidian";
 
+/** Result of a merge: ordered file paths + optional per-file page ranges. */
+export interface MergeSelection {
+	order: string[];
+	ranges: Record<string, string>;
+}
+
 /**
  * Multi-select checkbox modal listing PDFs in a single folder.
- * The user picks any number of files and confirms with the Merge button.
+ * Rows are draggable to reorder (output follows order), and each row has an
+ * optional page-range input ("all pages" when empty). The reference file (the
+ * one the right-click was invoked on) is preselected and shown first.
  */
 export class FilePickerModal extends Modal {
-	private onPick: (paths: string[]) => void;
-	// Selection is tracked by path, not by the checkbox element.
-	private selected = new Set<string>();
-	private boxes = new Map<string, HTMLInputElement>();
-	private pdfs: { path: string }[];
+	private onPick: (selection: MergeSelection) => void;
 
-	constructor(app: App, onPick: (paths: string[]) => void, referencePath?: string) {
+	// Ordered list of candidate paths (reference first, then others in vault order).
+	private order: string[];
+	// Selection state keyed by path.
+	private selected = new Set<string>();
+	// Per-file page range input values. Empty means "all pages".
+	private ranges: Record<string, string> = {};
+
+	constructor(app: App, onPick: (selection: MergeSelection) => void, referencePath?: string) {
 		super(app);
 		this.onPick = onPick;
-		this.referencePath = referencePath;
 
-		const allFiles = app.vault.getFiles().filter((f) => f.extension === "pdf");
-		if (referencePath) {
-			const ref = allFiles.find((f) => f.path === referencePath);
-			const parentPath = ref?.parent ? ref.parent.path : "";
-			this.pdfs = allFiles
-				.filter((f) => !ref || f.parent?.path === parentPath)
-				.map((f) => ({ path: f.path }));
-		} else {
-			this.pdfs = allFiles.map((f) => ({ path: f.path }));
+		const allFiles = app.vault.getFiles().filter((f) => f.extension === "pdf").map((f) => f.path);
+		if (referencePath && !allFiles.includes(referencePath)) {
+			allFiles.unshift(referencePath);
 		}
+		this.order = allFiles;
+
+		if (referencePath) this.selected.add(referencePath);
 
 		this.titleEl.setText("Select PDF files to merge");
 	}
@@ -34,68 +41,110 @@ export class FilePickerModal extends Modal {
 		const { contentEl } = this;
 		contentEl.empty();
 
-		if (this.pdfs.length === 0) {
-			contentEl.createDiv({ text: "No other PDF files found in this folder." });
+		if (this.order.length === 0) {
+			contentEl.createDiv({ text: "No PDF files found in this folder." });
 			return;
 		}
 
+		this.renderList();
+	}
+
+	private renderList(): void {
+		const { contentEl } = this;
+		contentEl.empty();
+
 		let selectedCount = 0;
-		const updateMergeBtn = () => {
-			this.mergeBtn.setText(
-				selectedCount > 0 ? `Merge (${selectedCount})` : "Merge"
-			);
-		};
+		for (const path of this.order) {
+			if (this.selected.has(path)) selectedCount++;
+		}
 
-		this.pdfs.forEach((file) => {
-			const row = contentEl.createDiv({ cls: "pdf-file-row" });
+		const list = contentEl.createDiv({ cls: "pdf-merge-list" });
 
-			if (file.path === this.referencePath) {
-				// Already chosen via right-click — show as read-only.
-				row.createSpan({
-					text: `${file.path.split("/").pop()}  (included)`,
-				}).style.color = "var(--text-muted)";
-				this.selected.add(file.path);
+		this.order.forEach((path) => {
+			const name = path.split("/").pop() ?? path;
+			const isReference = path === this.referencePath;
+
+			const row = list.createDiv({ cls: "pdf-file-row" });
+			if (isReference) row.classList.add("is-reference");
+
+			// Drag handle.
+			const handle = row.createSpan({ text: "\u2807", cls: "drag-handle" });
+			handle.setAttribute("draggable", "true");
+
+			// Checkbox.
+			const input = row.createEl("input", { type: "checkbox" });
+			input.checked = this.selected.has(path);
+			if (isReference) input.disabled = true;
+
+			// Name label.
+			const label = row.createSpan({ text: name, cls: "pdf-file-name" });
+			if (isReference) {
+				label.style.color = "var(--text-muted)";
+				row.createEl("span", { text: "  \u2014 included", cls: "pdf-file-ref" });
 			} else {
-				const input = row.createEl("input", { type: "checkbox" });
-				this.boxes.set(file.path, input);
-				input.addEventListener("change", () => {
-					if (input.checked) this.selected.add(file.path);
-					else this.selected.delete(file.path);
-					selectedCount = this.selected.size;
-					updateMergeBtn();
-				});
-
-				const label = row.createSpan({ text: file.path.split("/").pop() });
 				label.style.cursor = "pointer";
 				label.addEventListener("click", () => {
 					input.checked = !input.checked;
-					input.dispatchEvent(new Event("change"));
+					this.toggle(path, input.checked);
 				});
 			}
+
+			input.addEventListener("change", () => this.toggle(path, input.checked));
+
+			// Page-range input.
+			const rangeInput = row.createEl("input", { type: "text", cls: "pdf-page-range" });
+			rangeInput.placeholder = "all pages";
+			rangeInput.value = this.ranges[path] ?? "";
+			if (isReference) rangeInput.disabled = true;
+			rangeInput.addEventListener("input", () => {
+				this.ranges[path] = rangeInput.value.trim();
+			});
+
+			// Drag-and-drop reordering.
+			let draggedPath: string | null = null;
+			handle.addEventListener("dragstart", (e) => {
+				draggedPath = path;
+				e.dataTransfer!.setData("text/plain", path);
+				e.dataTransfer!.effectAllowed = "move";
+				row.classList.add("dragging");
+			});
+			handle.addEventListener("dragend", () => {
+				row.classList.remove("dragging");
+				draggedPath = null;
+			});
+
+			row.addEventListener("dragover", (e) => {
+				e.preventDefault();
+				if (draggedPath && draggedPath !== path) {
+					const targetIndex = this.order.indexOf(path);
+					const dragIndex = this.order.indexOf(draggedPath);
+					if (dragIndex !== -1 && targetIndex !== -1 && dragIndex !== targetIndex) {
+						// Move the dragged item to the current row's position.
+						const [moved] = this.order.splice(dragIndex, 1);
+						this.order.splice(targetIndex, 0, moved);
+						this.renderList();
+					}
+				}
+			});
 		});
 
-		this.mergeBtn = contentEl.createEl("button", {
-			text: `Merge (${this.pdfs.length})`,
+		// Merge button (created last so it stays at the bottom).
+		const btn = contentEl.createEl("button", {
+			text: selectedCount > 0 ? `Merge (${selectedCount})` : "Merge",
 			cls: "mod-primary pdf-merge-btn",
 		});
-		this.mergeBtn.addEventListener("click", () => {
-			const chosen = this.pdfs
-				.filter((f) => this.selected.has(f.path))
-				.map((f) => f.path);
-			if (!chosen.length) return;
-			this.onPick(chosen);
+		btn.addEventListener("click", () => {
+			if (selectedCount === 0) return;
+			const ranges = { ...this.ranges };
+			this.onPick({ order: [...this.order], ranges });
 			this.close();
 		});
-
-		updateMergeBtn();
 	}
 
-	private mergeBtn: HTMLButtonElement = null as any;
-
-	/** Pre-select a file path (used when invoked from the right-click menu). */
-	preselect(path: string): void {
-		if (!this.pdfs.some((f) => f.path === path)) return;
-		this.selected.add(path);
+	private toggle(path: string, checked: boolean): void {
+		if (checked) this.selected.add(path);
+		else this.selected.delete(path);
+		this.renderList();
 	}
 
 	onClose(): void {
