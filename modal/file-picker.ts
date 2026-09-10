@@ -41,7 +41,11 @@ export class FilePickerModal extends Modal {
 		this.onPick = onPick;
 		this.referencePath = referencePath;
 
-		const allFiles = app.vault.getFiles().filter((f) => f.extension === "pdf").map((f) => f.path);
+		const allFiles = app.vault.getFiles()
+			.filter((f) => f.extension === "pdf")
+			// Exclude previously-created merge outputs so they can't be re-merged.
+			.filter((f) => !f.name.endsWith("-merged.pdf"))
+			.map((f) => f.path);
 
 		if (referencePath && !allFiles.includes(referencePath)) {
 			allFiles.unshift(referencePath);
@@ -161,7 +165,11 @@ export class FilePickerModal extends Modal {
 		btn.addEventListener("click", () => {
 			if (selectedCount === 0) return;
 			const ranges = { ...this.ranges };
-			this.onPick({ order: [...this.order], ranges });
+			// Respect checkboxes: only merge files that are in `selected`
+			// (the reference file is always included). Drop any order entries
+			// the user has unchecked, keeping the remaining order intact.
+			const filteredOrder = this.order.filter((p) => this.selected.has(p));
+			this.onPick({ order: filteredOrder, ranges });
 			this.close();
 		});
 	}
