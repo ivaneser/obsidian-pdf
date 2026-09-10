@@ -59,9 +59,9 @@ async function extractPagesFrom(
 		const bytes = await loadPdfFromVault(app, target);
 		const out = await savePdf(await extractPages(source, pages, totalPages));
 
-		const file = app.vault.getAbstractFileByPath(filePath);
-		const dir = file?.parent ? file.parent.path : "";
-		const baseName = filePath.replace(/\.pdf$/i, "") + `-cut.pdf`;
+		// Output filename is just the basename + "-cut.pdf" (NOT the full path).
+		const dir = target.parent ? target.parent.path : "";
+		const baseName = target.basename.replace(/\.pdf$/i, "") + `-cut.pdf`;
 		await saveToVault(app, `${dir}/${baseName}`, out);
 
 		new Notice(`Extracted ${pages.length} page(s) to ${baseName}`);
