@@ -1,5 +1,5 @@
 import { App, Plugin } from "obsidian";
-import { runMerge } from "./commands/merge";
+import { runMerge, runMergeWith } from "./commands/merge";
 import { runCut } from "./commands/cut";
 
 export default class ObsidianPdfPlugin extends Plugin {
@@ -19,6 +19,12 @@ export default class ObsidianPdfPlugin extends Plugin {
 		this.registerEvent(
 			this.app.workspace.on("file-menu", (menu, file) => {
 				if ((file as any).extension === "pdf") {
+					menu.addItem((item) => {
+						item
+							.setTitle("PDF Studio: Merge with this PDF")
+							.setIcon("files")
+							.onClick(() => runMergeWith(this.app, file.path));
+					});
 					menu.addItem((item) => {
 						item
 							.setTitle("PDF Studio: Cut/extract pages")

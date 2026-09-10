@@ -1,13 +1,23 @@
-import { App, FuzzySuggestModal, Notice, TFile } from "obsidian";
+import { App, Notice, TFile } from "obsidian";
 import { PDFDocument } from "pdf-lib-bundled";
 import { loadPdf, mergePdfs, savePdf } from "../utils/pdf";
 import { readBinary, saveToVault } from "../utils/files";
+import { FilePickerModal } from "../modal/file-picker";
 
-/** Pick one or more PDF files from the vault via fuzzy search, then merge. */
+/** Pick one or more PDF files from the vault, then merge them. */
 export function runMerge(app: App): void {
 	new FilePickerModal(app, (paths) => {
 		void mergeFiles(app, paths);
 	}).open();
+}
+
+/** Start a merge that already includes `filePath` as the first selected file. */
+export function runMergeWith(app: App, filePath: string): void {
+	const modal = new FilePickerModal(app, (paths) => {
+		void mergeFiles(app, paths);
+	});
+	modal.preselect(filePath);
+	modal.open();
 }
 
 async function mergeFiles(app: App, paths: string[]): Promise<void> {
@@ -33,39 +43,11 @@ async function mergeFiles(app: App, paths: string[]): Promise<void> {
 		const out = await savePdf(merged);
 
 		const baseName = `merged-${new Date().toISOString().slice(0, 10)}.pdf`;
-		const targetFile = app.vault.getAbstractFileByPath(paths[0]);
-		const dir = targetFile?.parent ? targetFile.parent.path : "";
-		await saveToVault(app, `${dir}/${baseName}`, out);
+		await saveToVault(app, `${baseName}`, out);
 
 		if (notices.length) new Notice(notices.join("\n"));
 		new Notice(`Merged ${docs.length} file(s).`);
 	} catch (e) {
 		void new Notice(`Merge failed: ${(e as Error).message}`);
-	}
-}
-
-/** Fuzzy picker that lets the user choose PDF files from the vault. */
-class FilePickerModal extends FuzzySuggestModal<string> {
-	private onPick: (paths: string[]) => void;
-
-	constructor(app: App, onPick: (paths: string[]) => void) {
-		super(app);
-		this.onPick = onPick;
-		this.setPlaceholder("Search for PDF files...");
-	}
-
-	getItems(): string[] {
-		return this.app.vault
-			.getFiles()
-			.filter((f) => f.extension === "pdf")
-			.map((f) => f.path);
-	}
-
-	getItemText(path: string): string {
-		return path;
-	}
-
-	onChooseItem(path: string): void {
-		this.onPick([path]);
 	}
 }
