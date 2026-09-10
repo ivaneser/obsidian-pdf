@@ -39,6 +39,7 @@ export class FilePickerModal extends Modal {
 	constructor(app: App, onPick: (selection: MergeSelection) => void, referencePath?: string) {
 		super(app);
 		this.onPick = onPick;
+		this.referencePath = referencePath;
 
 		const allFiles = app.vault.getFiles().filter((f) => f.extension === "pdf").map((f) => f.path);
 
@@ -128,6 +129,7 @@ export class FilePickerModal extends Modal {
 
 				this.setupDragDrop(handle, row, path);
 			} else {
+				row.createEl("span", { text: name, cls: "pdf-file-name" });
 				row.createEl("span", { text: "  \u2014 included", cls: "pdf-file-ref" });
 
 				// Page-range input so the reference file's pages can be edited too.
