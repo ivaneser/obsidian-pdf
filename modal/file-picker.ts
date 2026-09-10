@@ -22,15 +22,30 @@ export class FilePickerModal extends Modal {
 	// Per-file page range input values. Empty means "all pages".
 	private ranges: Record<string, string> = {};
 
+	// Path being dragged; applied on dragend (not during dragover).
+	private reorderTarget: string | null = null;
+
 	constructor(app: App, onPick: (selection: MergeSelection) => void, referencePath?: string) {
 		super(app);
 		this.onPick = onPick;
 
 		const allFiles = app.vault.getFiles().filter((f) => f.extension === "pdf").map((f) => f.path);
+
 		if (referencePath && !allFiles.includes(referencePath)) {
 			allFiles.unshift(referencePath);
 		}
-		this.order = allFiles;
+
+		// Restrict the list to the reference file's folder (the current folder).
+		if (referencePath) {
+			const ref = allFiles.find((f) => f.path === referencePath);
+			const parentPath = ref?.parent ? ref.parent.path : "";
+			this.order = allFiles.filter((p) => {
+				const file = app.vault.getAbstractFileByPath(p);
+				return !file || (file.parent && file.parent.path === parentPath);
+			});
+		} else {
+			this.order = allFiles;
+		}
 
 		if (referencePath) this.selected.add(referencePath);
 
@@ -114,20 +129,26 @@ export class FilePickerModal extends Modal {
 			}
 			handle.addEventListener("dragend", () => {
 				row.classList.remove("dragging");
+				if (this.reorderTarget) {
+					const fromIndex = this.order.indexOf(this.reorderTarget);
+					const toIndex = this.order.indexOf(path);
+					if (fromIndex !== -1 && toIndex !== -1 && fromIndex !== toIndex) {
+						const [moved] = this.order.splice(fromIndex, 1);
+						this.order.splice(toIndex, 0, moved);
+					}
+					this.reorderTarget = null;
+					this.renderList();
+				}
 				draggedPath = null;
 			});
 
 			row.addEventListener("dragover", (e) => {
 				e.preventDefault();
 				if (draggedPath && draggedPath !== path) {
-					const targetIndex = this.order.indexOf(path);
 					const dragIndex = this.order.indexOf(draggedPath);
 					// Never let the reference (index 0) be dropped before it.
-					if (targetIndex === 0 && dragIndex !== 0) return;
-					if (dragIndex !== -1 && targetIndex !== -1 && dragIndex !== targetIndex) {
-						const [moved] = this.order.splice(dragIndex, 1);
-						this.order.splice(targetIndex, 0, moved);
-						this.renderList();
+					if (this.reorderTarget === null && dragIndex !== -1 && !(dragIndex === 0)) {
+						this.reorderTarget = draggedPath;
 					}
 				}
 			});
