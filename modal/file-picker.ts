@@ -129,6 +129,14 @@ export class FilePickerModal extends Modal {
 				this.setupDragDrop(handle, row, path);
 			} else {
 				row.createEl("span", { text: "  \u2014 included", cls: "pdf-file-ref" });
+
+				// Page-range input so the reference file's pages can be edited too.
+				const rangeInput = row.createEl("input", { type: "text", cls: "pdf-page-range" });
+				rangeInput.placeholder = "all pages";
+				rangeInput.value = this.ranges[path] ?? "";
+				rangeInput.addEventListener("input", () => {
+					this.ranges[path] = rangeInput.value.trim();
+				});
 			}
 		});
 
