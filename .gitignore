@@ -1,0 +1,9 @@
+# Dependencies
+node_modules/
+
+# Build output
+main.js
+esbuild.js.map
+
+# OS files
+.DS_Store

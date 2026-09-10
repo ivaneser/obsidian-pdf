@@ -1,0 +1,10 @@
+{
+	"id": "obsidian-pdf",
+	"name": "PDF Merge & Cut",
+	"version": "1.0.0",
+	"minAppVersion": "1.4.0",
+	"description": "Merge PDF files and cut/extract pages from vault documents directly in Obsidian.",
+	"author": "ivaneser",
+	"authorUrl": "https://github.com/ivaneser/obsidian-pdf",
+	"isDesktopOnly": false
+}
