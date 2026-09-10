@@ -1,4 +1,4 @@
-import { App, Modal } from "obsidian";
+import { App, Modal, Notice } from "obsidian";
 
 /**
  * Multi-select checkbox modal listing PDFs in a single folder.
@@ -6,13 +6,15 @@ import { App, Modal } from "obsidian";
  */
 export class FilePickerModal extends Modal {
 	private onPick: (paths: string[]) => void;
+	// Selection is tracked by path, not by the checkbox element.
 	private selected = new Set<string>();
 	private boxes = new Map<string, HTMLInputElement>();
-	private pdfs: { path: string; parentPath: string }[];
+	private pdfs: { path: string }[];
 
 	constructor(app: App, onPick: (paths: string[]) => void, referencePath?: string) {
 		super(app);
 		this.onPick = onPick;
+		this.referencePath = referencePath;
 
 		const allFiles = app.vault.getFiles().filter((f) => f.extension === "pdf");
 		if (referencePath) {
@@ -20,11 +22,9 @@ export class FilePickerModal extends Modal {
 			const parentPath = ref?.parent ? ref.parent.path : "";
 			this.pdfs = allFiles
 				.filter((f) => !ref || f.parent?.path === parentPath)
-				// Skip the file that was already chosen (right-click target).
-				.filter((f) => f.path !== referencePath)
-				.map((f) => ({ path: f.path, parentPath: f.parent?.path ?? "" }));
+				.map((f) => ({ path: f.path }));
 		} else {
-			this.pdfs = allFiles.map((f) => ({ path: f.path, parentPath: f.parent?.path ?? "" }));
+			this.pdfs = allFiles.map((f) => ({ path: f.path }));
 		}
 
 		this.titleEl.setText("Select PDF files to merge");
@@ -49,20 +49,31 @@ export class FilePickerModal extends Modal {
 		this.pdfs.forEach((file) => {
 			const row = contentEl.createDiv({ cls: "pdf-file-row" });
 
-			const input = row.createEl("input", { type: "checkbox" });
-			this.boxes.set(file.path, input);
-			input.addEventListener("change", () => {
-				selectedCount += input.checked ? 1 : -1;
-				updateMergeBtn();
-			});
+			const isReference = file.path === this.referencePath;
 
-			// Show only the file name (all files share this folder).
-			const label = row.createSpan({ text: file.path.split("/").pop() });
-			label.style.cursor = "pointer";
-			label.addEventListener("click", () => {
-				input.checked = !input.checked;
-				input.dispatchEvent(new Event("change"));
-			});
+			if (isReference) {
+				// Already chosen via right-click — show as read-only.
+				row.createSpan({
+					text: `${file.path.split("/").pop()}  (included)`,
+				}).style.color = "var(--text-muted)";
+				this.selected.add(file.path);
+			} else {
+				const input = row.createEl("input", { type: "checkbox" });
+				this.boxes.set(file.path, input);
+				input.addEventListener("change", () => {
+					if (input.checked) this.selected.add(file.path);
+					else this.selected.delete(file.path);
+					selectedCount = this.selected.size;
+					updateMergeBtn();
+				});
+
+				const label = row.createSpan({ text: file.path.split("/").pop() });
+				label.style.cursor = "pointer";
+				label.addEventListener("click", () => {
+					input.checked = !input.checked;
+					input.dispatchEvent(new Event("change"));
+				});
+			}
 		});
 
 		this.mergeBtn = contentEl.createEl("button", {
@@ -70,11 +81,21 @@ export class FilePickerModal extends Modal {
 			cls: "mod-primary pdf-merge-btn",
 		});
 		this.mergeBtn.addEventListener("click", () => {
+			console.log("[merge] button clicked");
 			const chosen = this.pdfs
 				.filter((f) => this.selected.has(f.path))
 				.map((f) => f.path);
-			if (!chosen.length) return;
-			this.onPick(chosen);
+			console.log("[merge] selected:", chosen, "count:", chosen.length);
+			if (!chosen.length) {
+				new Notice("Ничего не выбрано для слияния.");
+				return;
+			}
+			try {
+				this.onPick(chosen);
+			} catch (e) {
+				console.error("[merge] onPick threw:", e);
+				void new Notice(`Ошибка: ${(e as Error).message}`);
+			}
 			this.close();
 		});
 
@@ -85,14 +106,14 @@ export class FilePickerModal extends Modal {
 
 	/** Pre-select a file path (used when invoked from the right-click menu). */
 	preselect(path: string): void {
-		if (!this.boxes.has(path)) return;
-		const input = this.boxes.get(path)!;
-		input.checked = true;
+		if (!this.pdfs.some((f) => f.path === path)) return;
 		this.selected.add(path);
-		input.dispatchEvent(new Event("change"));
+		this.mergeBtn.setText(`Merge (${this.selected.size})`);
 	}
 
 	onClose(): void {
 		this.contentEl.empty();
 	}
+
+	private referencePath?: string;
 }
