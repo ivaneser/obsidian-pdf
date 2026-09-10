@@ -42,8 +42,13 @@ async function mergeFiles(app: App, paths: string[]): Promise<void> {
 		const merged = await mergePdfs(docs);
 		const out = await savePdf(merged);
 
+		// Save in the same folder as the first selected file.
+		const first = app.vault.getAbstractFileByPath(paths[0]);
+		if (!(first instanceof TFile)) return void new Notice("No valid PDFs to merge.");
+		const dir = first.parent ? first.parent.path : "";
+
 		const baseName = `merged-${new Date().toISOString().slice(0, 10)}.pdf`;
-		await saveToVault(app, `${baseName}`, out);
+		await saveToVault(app, `${dir}/${baseName}`, out);
 
 		if (notices.length) new Notice(notices.join("\n"));
 		new Notice(`Merged ${docs.length} file(s).`);
