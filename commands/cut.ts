@@ -6,9 +6,13 @@ import { TextEntryModal } from "../modal/text-entry";
 
 /** Cut / extract pages from a single PDF file. */
 export function runCut(app: App, file?: { path: string } | null): void {
-	if (file) return promptForRanges(app, file.path);
+	// Guard against missing/invalid file argument (e.g. stale file-menu callback)
+	if (!file || typeof file.path !== "string" || !file.path.trim()) {
+		new Notice("No valid PDF file selected.");
+		return;
+	}
 
-	new FilePickerModal(app, (path) => promptForRanges(app, path)).open();
+	promptForRanges(app, file.path);
 }
 
 function promptForRanges(app: App, filePath: string): void {
