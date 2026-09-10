@@ -56,9 +56,8 @@ export class FilePickerModal extends Modal {
 			// original position in the vault listing.
 			if (filtered.includes(referencePath)) {
 				filtered.splice(filtered.indexOf(referencePath), 1);
-			} else {
-				filtered.unshift(referencePath);
 			}
+			filtered.unshift(referencePath);
 			this.order = filtered;
 		} else {
 			this.order = allFiles;
