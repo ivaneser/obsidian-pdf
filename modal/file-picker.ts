@@ -1,4 +1,4 @@
-import { App, Modal, Notice } from "obsidian";
+import { App, Modal } from "obsidian";
 
 /**
  * Multi-select checkbox modal listing PDFs in a single folder.
@@ -49,9 +49,7 @@ export class FilePickerModal extends Modal {
 		this.pdfs.forEach((file) => {
 			const row = contentEl.createDiv({ cls: "pdf-file-row" });
 
-			const isReference = file.path === this.referencePath;
-
-			if (isReference) {
+			if (file.path === this.referencePath) {
 				// Already chosen via right-click — show as read-only.
 				row.createSpan({
 					text: `${file.path.split("/").pop()}  (included)`,
@@ -81,21 +79,11 @@ export class FilePickerModal extends Modal {
 			cls: "mod-primary pdf-merge-btn",
 		});
 		this.mergeBtn.addEventListener("click", () => {
-			console.log("[merge] button clicked");
 			const chosen = this.pdfs
 				.filter((f) => this.selected.has(f.path))
 				.map((f) => f.path);
-			console.log("[merge] selected:", chosen, "count:", chosen.length);
-			if (!chosen.length) {
-				new Notice("Ничего не выбрано для слияния.");
-				return;
-			}
-			try {
-				this.onPick(chosen);
-			} catch (e) {
-				console.error("[merge] onPick threw:", e);
-				void new Notice(`Ошибка: ${(e as Error).message}`);
-			}
+			if (!chosen.length) return;
+			this.onPick(chosen);
 			this.close();
 		});
 
@@ -108,7 +96,6 @@ export class FilePickerModal extends Modal {
 	preselect(path: string): void {
 		if (!this.pdfs.some((f) => f.path === path)) return;
 		this.selected.add(path);
-		this.mergeBtn.setText(`Merge (${this.selected.size})`);
 	}
 
 	onClose(): void {
