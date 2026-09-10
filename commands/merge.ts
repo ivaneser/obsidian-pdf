@@ -15,7 +15,7 @@ export function runMerge(app: App): void {
 export function runMergeWith(app: App, filePath: string): void {
 	const modal = new FilePickerModal(app, (paths) => {
 		void mergeFiles(app, paths);
-	});
+	}, filePath);
 	modal.preselect(filePath);
 	modal.open();
 }

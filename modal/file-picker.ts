@@ -1,17 +1,30 @@
 import { App, Modal } from "obsidian";
 
 /**
- * Multi-select checkbox modal listing every PDF in the vault.
+ * Multi-select checkbox modal listing PDFs in a single folder.
  * The user picks any number of files and confirms with the Merge button.
  */
 export class FilePickerModal extends Modal {
 	private onPick: (paths: string[]) => void;
 	private selected = new Set<string>();
 	private boxes = new Map<string, HTMLInputElement>();
+	private pdfs: { path: string; parentPath: string }[];
 
-	constructor(app: App, onPick: (paths: string[]) => void) {
+	constructor(app: App, onPick: (paths: string[]) => void, referencePath?: string) {
 		super(app);
 		this.onPick = onPick;
+
+		const allFiles = app.vault.getFiles().filter((f) => f.extension === "pdf");
+		if (referencePath) {
+			const ref = allFiles.find((f) => f.path === referencePath);
+			const parentPath = ref?.parent ? ref.parent.path : "";
+			this.pdfs = allFiles
+				.filter((f) => (!ref || f.parent?.path === parentPath))
+				.map((f) => ({ path: f.path, parentPath: f.parent?.path ?? "" }));
+		} else {
+			this.pdfs = allFiles.map((f) => ({ path: f.path, parentPath: f.parent?.path ?? "" }));
+		}
+
 		this.titleEl.setText("Select PDF files to merge");
 	}
 
@@ -19,9 +32,7 @@ export class FilePickerModal extends Modal {
 		const { contentEl } = this;
 		contentEl.empty();
 
-		const files = this.app.vault.getFiles().filter((f) => f.extension === "pdf");
-
-		if (files.length === 0) {
+		if (this.pdfs.length === 0) {
 			contentEl.createDiv({ text: "No PDF files found in your vault." });
 			return;
 		}
@@ -33,7 +44,7 @@ export class FilePickerModal extends Modal {
 			);
 		};
 
-		files.forEach((file) => {
+		this.pdfs.forEach((file) => {
 			const row = contentEl.createDiv({ cls: "pdf-file-row" });
 
 			const input = row.createEl("input", { type: "checkbox" });
@@ -52,12 +63,12 @@ export class FilePickerModal extends Modal {
 		});
 
 		this.mergeBtn = contentEl.createEl("button", {
-			text: `Merge (${files.length})`,
+			text: `Merge (${this.pdfs.length})`,
 			cls: "mod-primary pdf-merge-btn",
 		});
 		this.mergeBtn.addEventListener("click", () => {
 			if (!this.selected.size) return;
-			const chosen = files
+			const chosen = this.pdfs
 				.filter((f) => this.selected.has(f.path))
 				.map((f) => f.path);
 			this.onPick(chosen);
