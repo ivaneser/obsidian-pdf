@@ -4,7 +4,8 @@
   "description": "Merge PDF files and cut/extract pages from vault documents directly in Obsidian.",
   "scripts": {
     "dev": "node esbuild.js",
-    "build": "tsc --noEmit && node esbuild.js"
+    "build": "tsc --noEmit && node esbuild.js",
+    "install": "node install.js"
   },
   "keywords": ["obsidian", "pdf", "merge", "cut"],
   "license": "MIT",
