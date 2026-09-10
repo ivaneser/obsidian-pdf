@@ -4,7 +4,8 @@ declare module "pdf-lib-bundled" {
 		static create(): Promise<PDFDocument>;
 		getPageCount(): number;
 		getPages(): any[];
-		copyPage(page: any): void;
+		copyPages(source: PDFDocument, indices: number[]): Promise<any[]>;
+		addPage(page: any): void;
 		save(): Promise<ArrayBuffer>;
 	}
 }

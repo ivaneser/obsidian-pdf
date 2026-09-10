@@ -16,9 +16,16 @@ export async function extractPages(
 	totalPages: number
 ): Promise<PDFDocument> {
 	const out = await PDFDocument.create();
-	for (const p of pages) {
-		if (p < 1 || p > totalPages) continue;
-		out.copyPage(source.getPages()[p - 1]);
+	// Map to 0-based indices and copy them all in one pass via copyPages().
+	const indices = pages
+		.filter((p) => p >= 1 && p <= totalPages)
+		.map((p) => p - 1);
+
+	if (indices.length === 0) return out;
+
+	const copied = await out.copyPages(source, indices);
+	for (const page of copied) {
+		out.addPage(page);
 	}
 	return out;
 }
@@ -27,8 +34,16 @@ export async function extractPages(
 export async function mergePdfs(docs: PDFDocument[]): Promise<PDFDocument> {
 	if (docs.length === 0) throw new Error("No documents to merge.");
 	const merged = await PDFDocument.create();
+
+	// Collect all pages across docs, copy them in one batch per source doc.
 	for (const doc of docs) {
-		for (const page of doc.getPages()) merged.copyPage(page);
+		const indices: number[] = [];
+		for (let i = 0; i < doc.getPageCount(); i++) indices.push(i);
+		if (indices.length === 0) continue;
+		const copied = await merged.copyPages(doc, indices);
+		for (const page of copied) {
+			merged.addPage(page);
+		}
 	}
 	return merged;
 }
